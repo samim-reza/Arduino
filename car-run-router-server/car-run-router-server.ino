@@ -1,8 +1,14 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 
-const char* ssid = "GUB";
-const char* password = "GUB!@#2023";
+// const char* ssid = "GUB";
+// const char* password = "GUB!@#2023";
+
+// const char* ssid = "Room_506";
+// const char* password = "greeN@121";
+
+const char* ssid = "Hotspot";
+const char* password = "123456789";
 
 // const char* ssid = "Hepnox";
 // const char* password = "Hepnox-Password";
@@ -15,7 +21,7 @@ static const uint8_t dir_A = 0;
 static const uint8_t dir_B = 2;
 
 // Motor speed = [0-1024]
-int motor_speed = 512;
+int motor_speed = 100;
 bool reconnecting = false;
 
 void setup() {
@@ -31,6 +37,7 @@ void setup() {
 
   server.on("/move", HTTP_GET, handleMoveRequest);
   server.on("/speed", HTTP_GET, handleSpeedRequest);
+  server.on("/pwm", HTTP_GET, handlePWM);
   server.onNotFound(handleNotFound);
   server.begin();
   
@@ -178,7 +185,15 @@ void turn_right() {
 }
 
 void speed_control(int num) {
-  motor_speed = map(num, 1, 100, 0, 1023); 
+  motor_speed = num*3.41;
   Serial.print("New motor speed set to: ");
   Serial.println(motor_speed);
+}
+
+void handlePWM() {
+  String response = "{";
+  response += "\"pwm\": " + String(motor_speed);
+  response += "}";
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", response);
 }
