@@ -2,8 +2,14 @@
 #include <WebSocketsServer.h>
 #include <Servo.h>
 
-const char* ssid = "Hepnox";
-const char* password = "Hepnox-Password";
+// const char* ssid = "Hepnox";
+// const char* password = "Hepnox-Password";
+
+// const char* ssid = "Room_506";
+// const char* password = "greeN@121";
+
+const char* ssid = "Hotspot";
+const char* password = "123456789";
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
@@ -72,6 +78,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
       openClosePos = msg.substring(10).toInt();
       if (openClosePos < openCloseMin) openClosePos = openCloseMin;
       if (openClosePos > openCloseMax) openClosePos = openCloseMax;
+      Serial.print("Changing openclose: ");
+      Serial.println(openClosePos);
       openCloseServo.write(openClosePos);
     } else if (msg.startsWith("leftRight:")) {
       leftRightPos = msg.substring(10).toInt();
@@ -79,9 +87,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
       if (leftRightPos > leftRightMax) leftRightPos = leftRightMax;
       moveServoGradually(leftRightServo, leftRightPos);
     } else if (msg.startsWith("forwardBackward:")) {
-      forwardBackwardPos = msg.substring(15).toInt();
+      forwardBackwardPos = msg.substring(16).toInt();
       if (forwardBackwardPos < forwardBackwardMin) forwardBackwardPos = forwardBackwardMin;
       if (forwardBackwardPos > forwardBackwardMax) forwardBackwardPos = forwardBackwardMax;
+      Serial.print("Changing for-back: ");
+      Serial.println(forwardBackwardPos);
       moveServoGradually(forwardBackwardServo, forwardBackwardPos);
     } else if (msg.startsWith("position:")) {
 

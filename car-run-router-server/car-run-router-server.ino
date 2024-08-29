@@ -10,6 +10,9 @@
 const char* ssid = "Hotspot";
 const char* password = "123456789";
 
+// const char* ssid = "Tanvir WiFi";
+// const char* password = "tanvir2020";
+
 // const char* ssid = "Hepnox";
 // const char* password = "Hepnox-Password";
 
