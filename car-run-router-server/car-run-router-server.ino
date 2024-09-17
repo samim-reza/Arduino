@@ -173,16 +173,16 @@ void forward() {
 
 void turn_left() {
   analogWrite(pwm_A, 0);
-  analogWrite(pwm_B, motor_speed);
+  analogWrite(pwm_B, motor_speed*1.5);
   analogWrite(dir_A, 0);
-  analogWrite(dir_B, motor_speed);
+  analogWrite(dir_B, motor_speed*1.5);
   Serial.println("Turning left");
 }
 
 void turn_right() {
-  analogWrite(pwm_A, motor_speed);
+  analogWrite(pwm_A, motor_speed*1.5);
   analogWrite(pwm_B, 0);
-  analogWrite(dir_A, motor_speed);
+  analogWrite(dir_A, motor_speed*1.5);
   analogWrite(dir_B, 0);
   Serial.println("Turning right");
 }

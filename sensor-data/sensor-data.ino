@@ -15,8 +15,8 @@ Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 DHT dht(DHTPIN, DHTTYPE);
 
 
-// const char* ssid = "Hotspot";
-// const char* password = "123456789";
+const char* ssid = "Hotspot";
+const char* password = "123456789";
 
 //  const char* ssid = "GUB";
 // const char* password = "GUB!@#2023";
@@ -24,8 +24,8 @@ DHT dht(DHTPIN, DHTTYPE);
 // const char* ssid = "Room_506";
 // const char* password = "greeN@121";
 
-  const char* ssid = "Hepnox";
-  const char* password = "Hepnox-Password";
+  // const char* ssid = "Hepnox";
+  // const char* password = "Hepnox-Password";
 
 long duration;
 int distance;

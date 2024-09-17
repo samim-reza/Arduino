@@ -100,20 +100,29 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
       int targetUpDownPos, targetOpenClosePos, targetLeftRightPos, targetForwardBackwardPos;
 
       if (position == "lowest") {
-        targetUpDownPos = upDownMin;
-        targetForwardBackwardPos = forwardBackwardMin;
+        // targetUpDownPos = upDownMin;
+        // targetForwardBackwardPos = forwardBackwardMin;
+        moveServoGradually(upDownServo,80);
+        moveServoGradually(leftRightServo,90);
+        moveServoGradually(forwardBackwardServo,0);
       } else if (position == "highest") {
-        targetUpDownPos = upDownMax;
-        targetForwardBackwardPos = forwardBackwardMax;
+        // targetUpDownPos = upDownMax;
+        // targetForwardBackwardPos = forwardBackwardMax;
+        moveServoGradually(upDownServo,0);
+        moveServoGradually(leftRightServo,90);
+        moveServoGradually(forwardBackwardServo,0);
       } else if (position == "middle") {
-        targetUpDownPos = (upDownMin + upDownMax) / 2;
-        targetForwardBackwardPos = (forwardBackwardMin + forwardBackwardMax) / 2;
+        // targetUpDownPos = (upDownMin + upDownMax) / 2;
+        // targetForwardBackwardPos = (forwardBackwardMin + forwardBackwardMax) / 2;
+        moveServoGradually(upDownServo,40);
+        moveServoGradually(leftRightServo,90);
+        moveServoGradually(forwardBackwardServo,0);
       }
 
-      moveServoGradually(upDownServo, targetUpDownPos);
-      openCloseServo.write(targetOpenClosePos);
-      moveServoGradually(leftRightServo, leftRightPos);
-      moveServoGradually(forwardBackwardServo, targetForwardBackwardPos);
+      // moveServoGradually(upDownServo, targetUpDownPos);
+      // openCloseServo.write(targetOpenClosePos);
+      // moveServoGradually(leftRightServo, leftRightPos);
+      // moveServoGradually(forwardBackwardServo, targetForwardBackwardPos);
 
       upDownPos = targetUpDownPos;
       openClosePos = targetOpenClosePos;
