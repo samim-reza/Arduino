@@ -167,13 +167,37 @@ void onWebSocketEvent(uint8_t client_num, WStype_t type, uint8_t *payload, size_
 
       // Parse the received data as latitude and longitude
       if (receivedData.indexOf(",") != -1) {
-        String lat = receivedData.substring(0, receivedData.indexOf(","));
-        String lng = receivedData.substring(receivedData.indexOf(",") + 1);
+        String latStr = receivedData.substring(0, receivedData.indexOf(","));
+        String lngStr = receivedData.substring(receivedData.indexOf(",") + 1);
+
+        float targetLat = latStr.toFloat();
+        float targetLng = lngStr.toFloat();
 
         Serial.print("Received Latitude: ");
-        Serial.println(lat);
+        Serial.println(targetLat, 6);
         Serial.print("Received Longitude: ");
-        Serial.println(lng);
+        Serial.println(targetLng, 6);
+
+        // Calculate the bearing from current location to target location
+        float deltaLng = radians(targetLng - currentLng);
+        float currentLatRad = radians(currentLat);
+        float targetLatRad = radians(targetLat);
+
+        float y = sin(deltaLng) * cos(targetLatRad);
+        float x = cos(currentLatRad) * sin(targetLatRad) - 
+                  sin(currentLatRad) * cos(targetLatRad) * cos(deltaLng);
+
+        float bearingRad = atan2(y, x);  // Bearing in radians
+        float bearingDeg = degrees(bearingRad);  // Convert to degrees
+
+        // Normalize the bearing to 0-360 degrees
+        if (bearingDeg < 0) {
+          bearingDeg += 360;
+        }
+
+        Serial.print("Bearing to Target: ");
+        Serial.print(bearingDeg, 2);
+        Serial.println("°");
       } else {
         Serial.println("Invalid data format. Expected 'latitude,longitude'.");
       }
@@ -183,4 +207,5 @@ void onWebSocketEvent(uint8_t client_num, WStype_t type, uint8_t *payload, size_
       break;
   }
 }
+
 
