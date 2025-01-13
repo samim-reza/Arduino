@@ -20,7 +20,8 @@
 */
 #include "ESPAsyncWebServer.h"
 #include "WebResponseImpl.h"
-#include "cbuf.h"
+
+using namespace asyncsrv;
 
 // Since ESP8266 does not link memchr by default, here's its implementation.
 void* memchr(void* ptr, int ch, size_t count) {
@@ -33,95 +34,95 @@ void* memchr(void* ptr, int ch, size_t count) {
 
 /*
  * Abstract Response
- * */
-const char* AsyncWebServerResponse::_responseCodeToString(int code) {
-  return reinterpret_cast<const char*>(responseCodeToString(code));
-}
+ *
+ */
 
-const __FlashStringHelper* AsyncWebServerResponse::responseCodeToString(int code) {
+const char* AsyncWebServerResponse::responseCodeToString(int code) {
   switch (code) {
     case 100:
-      return F("Continue");
+      return T_HTTP_CODE_100;
     case 101:
-      return F("Switching Protocols");
+      return T_HTTP_CODE_101;
     case 200:
-      return F("OK");
+      return T_HTTP_CODE_200;
     case 201:
-      return F("Created");
+      return T_HTTP_CODE_201;
     case 202:
-      return F("Accepted");
+      return T_HTTP_CODE_202;
     case 203:
-      return F("Non-Authoritative Information");
+      return T_HTTP_CODE_203;
     case 204:
-      return F("No Content");
+      return T_HTTP_CODE_204;
     case 205:
-      return F("Reset Content");
+      return T_HTTP_CODE_205;
     case 206:
-      return F("Partial Content");
+      return T_HTTP_CODE_206;
     case 300:
-      return F("Multiple Choices");
+      return T_HTTP_CODE_300;
     case 301:
-      return F("Moved Permanently");
+      return T_HTTP_CODE_301;
     case 302:
-      return F("Found");
+      return T_HTTP_CODE_302;
     case 303:
-      return F("See Other");
+      return T_HTTP_CODE_303;
     case 304:
-      return F("Not Modified");
+      return T_HTTP_CODE_304;
     case 305:
-      return F("Use Proxy");
+      return T_HTTP_CODE_305;
     case 307:
-      return F("Temporary Redirect");
+      return T_HTTP_CODE_307;
     case 400:
-      return F("Bad Request");
+      return T_HTTP_CODE_400;
     case 401:
-      return F("Unauthorized");
+      return T_HTTP_CODE_401;
     case 402:
-      return F("Payment Required");
+      return T_HTTP_CODE_402;
     case 403:
-      return F("Forbidden");
+      return T_HTTP_CODE_403;
     case 404:
-      return F("Not Found");
+      return T_HTTP_CODE_404;
     case 405:
-      return F("Method Not Allowed");
+      return T_HTTP_CODE_405;
     case 406:
-      return F("Not Acceptable");
+      return T_HTTP_CODE_406;
     case 407:
-      return F("Proxy Authentication Required");
+      return T_HTTP_CODE_407;
     case 408:
-      return F("Request Time-out");
+      return T_HTTP_CODE_408;
     case 409:
-      return F("Conflict");
+      return T_HTTP_CODE_409;
     case 410:
-      return F("Gone");
+      return T_HTTP_CODE_410;
     case 411:
-      return F("Length Required");
+      return T_HTTP_CODE_411;
     case 412:
-      return F("Precondition Failed");
+      return T_HTTP_CODE_412;
     case 413:
-      return F("Request Entity Too Large");
+      return T_HTTP_CODE_413;
     case 414:
-      return F("Request-URI Too Large");
+      return T_HTTP_CODE_414;
     case 415:
-      return F("Unsupported Media Type");
+      return T_HTTP_CODE_415;
     case 416:
-      return F("Requested range not satisfiable");
+      return T_HTTP_CODE_416;
     case 417:
-      return F("Expectation Failed");
+      return T_HTTP_CODE_417;
+    case 429:
+      return T_HTTP_CODE_429;
     case 500:
-      return F("Internal Server Error");
+      return T_HTTP_CODE_500;
     case 501:
-      return F("Not Implemented");
+      return T_HTTP_CODE_501;
     case 502:
-      return F("Bad Gateway");
+      return T_HTTP_CODE_502;
     case 503:
-      return F("Service Unavailable");
+      return T_HTTP_CODE_503;
     case 504:
-      return F("Gateway Time-out");
+      return T_HTTP_CODE_504;
     case 505:
-      return F("HTTP Version not supported");
+      return T_HTTP_CODE_505;
     default:
-      return F("");
+      return T_HTTP_CODE_ANY;
   }
 }
 
@@ -132,58 +133,104 @@ AsyncWebServerResponse::AsyncWebServerResponse()
   }
 }
 
-AsyncWebServerResponse::~AsyncWebServerResponse() = default;
-
 void AsyncWebServerResponse::setCode(int code) {
   if (_state == RESPONSE_SETUP)
     _code = code;
 }
 
 void AsyncWebServerResponse::setContentLength(size_t len) {
-  if (_state == RESPONSE_SETUP)
+  if (_state == RESPONSE_SETUP && addHeader(T_Content_Length, len, true))
     _contentLength = len;
 }
 
-void AsyncWebServerResponse::setContentType(const String& type) {
-  if (_state == RESPONSE_SETUP)
+void AsyncWebServerResponse::setContentType(const char* type) {
+  if (_state == RESPONSE_SETUP && addHeader(T_Content_Type, type, true))
     _contentType = type;
 }
 
-void AsyncWebServerResponse::addHeader(const String& name, const String& value) {
-  _headers.emplace_back(name, value);
+bool AsyncWebServerResponse::removeHeader(const char* name) {
+  for (auto i = _headers.begin(); i != _headers.end(); ++i) {
+    if (i->name().equalsIgnoreCase(name)) {
+      _headers.erase(i);
+      return true;
+    }
+  }
+  return false;
 }
 
-String AsyncWebServerResponse::_assembleHead(uint8_t version) {
+const AsyncWebHeader* AsyncWebServerResponse::getHeader(const char* name) const {
+  auto iter = std::find_if(std::begin(_headers), std::end(_headers), [&name](const AsyncWebHeader& header) { return header.name().equalsIgnoreCase(name); });
+  return (iter == std::end(_headers)) ? nullptr : &(*iter);
+}
+
+bool AsyncWebServerResponse::addHeader(const char* name, const char* value, bool replaceExisting) {
+  for (auto i = _headers.begin(); i != _headers.end(); ++i) {
+    if (i->name().equalsIgnoreCase(name)) {
+      // header already set
+      if (replaceExisting) {
+        // remove, break and add the new one
+        _headers.erase(i);
+        break;
+      } else {
+        // do not update
+        return false;
+      }
+    }
+  }
+  // header was not found found, or existing one was removed
+  _headers.emplace_back(name, value);
+  return true;
+}
+
+void AsyncWebServerResponse::_assembleHead(String& buffer, uint8_t version) {
   if (version) {
-    addHeader(F("Accept-Ranges"), F("none"));
+    addHeader(T_Accept_Ranges, T_none, false);
     if (_chunked)
-      addHeader(F("Transfer-Encoding"), F("chunked"));
-  }
-  String out = String();
-  int bufSize = 300;
-  char buf[bufSize];
-
-  snprintf_P(buf, bufSize, PSTR("HTTP/1.%d %d %s\r\n"), version, _code, _responseCodeToString(_code));
-  out.concat(buf);
-
-  if (_sendContentLength) {
-    snprintf_P(buf, bufSize, PSTR("Content-Length: %d\r\n"), _contentLength);
-    out.concat(buf);
-  }
-  if (_contentType.length()) {
-    snprintf_P(buf, bufSize, PSTR("Content-Type: %s\r\n"), _contentType.c_str());
-    out.concat(buf);
+      addHeader(T_Transfer_Encoding, T_chunked, false);
   }
 
+  if (_sendContentLength)
+    addHeader(T_Content_Length, String(_contentLength), false);
+
+  if (_contentType.length())
+    addHeader(T_Content_Type, _contentType.c_str(), false);
+
+  // precompute buffer size to avoid reallocations by String class
+  size_t len = 0;
+  len += 50; // HTTP/1.1 200 <reason>\r\n
+  for (const auto& header : _headers)
+    len += header.name().length() + header.value().length() + 4;
+
+  // prepare buffer
+  buffer.reserve(len);
+
+  // HTTP header
+#ifdef ESP8266
+  buffer.concat(PSTR("HTTP/1."));
+#else
+  buffer.concat("HTTP/1.");
+#endif
+  buffer.concat(version);
+  buffer.concat(' ');
+  buffer.concat(_code);
+  buffer.concat(' ');
+  buffer.concat(responseCodeToString(_code));
+  buffer.concat(T_rn);
+
+  // Add headers
   for (const auto& header : _headers) {
-    snprintf_P(buf, bufSize, PSTR("%s: %s\r\n"), header.name().c_str(), header.value().c_str());
-    out.concat(buf);
+    buffer.concat(header.name());
+#ifdef ESP8266
+    buffer.concat(PSTR(": "));
+#else
+    buffer.concat(": ");
+#endif
+    buffer.concat(header.value());
+    buffer.concat(T_rn);
   }
-  _headers.clear();
 
-  out.concat(F("\r\n"));
-  _headLength = out.length();
-  return out;
+  buffer.concat(T_rn);
+  _headLength = buffer.length();
 }
 
 bool AsyncWebServerResponse::_started() const { return _state > RESPONSE_SETUP; }
@@ -204,21 +251,22 @@ size_t AsyncWebServerResponse::_ack(AsyncWebServerRequest* request, size_t len, 
 /*
  * String/Code Response
  * */
-AsyncBasicResponse::AsyncBasicResponse(int code, const String& contentType, const String& content) {
+AsyncBasicResponse::AsyncBasicResponse(int code, const char* contentType, const char* content) {
   _code = code;
   _content = content;
   _contentType = contentType;
   if (_content.length()) {
     _contentLength = _content.length();
     if (!_contentType.length())
-      _contentType = F("text/plain");
+      _contentType = T_text_plain;
   }
-  addHeader(F("Connection"), F("close"));
+  addHeader(T_Connection, T_close, false);
 }
 
 void AsyncBasicResponse::_respond(AsyncWebServerRequest* request) {
   _state = RESPONSE_HEADERS;
-  String out = _assembleHead(request->version());
+  String out;
+  _assembleHead(out, request->version());
   size_t outLen = out.length();
   size_t space = request->client()->space();
   if (!_contentLength && space >= outLen) {
@@ -259,7 +307,7 @@ size_t AsyncBasicResponse::_ack(AsyncWebServerRequest* request, size_t len, uint
     // we can fit in this packet
     if (space > available) {
       _writtenLength += request->client()->write(_content.c_str(), available);
-      _content = String();
+      _content = emptyString;
       _state = RESPONSE_WAIT_ACK;
       return available;
     }
@@ -291,8 +339,8 @@ AsyncAbstractResponse::AsyncAbstractResponse(AwsTemplateProcessor callback) : _c
 }
 
 void AsyncAbstractResponse::_respond(AsyncWebServerRequest* request) {
-  addHeader(F("Connection"), F("close"));
-  _head = _assembleHead(request->version());
+  addHeader(T_Connection, T_close, false);
+  _assembleHead(_head, request->version());
   _state = RESPONSE_HEADERS;
   _ack(request, 0, 0);
 }
@@ -304,7 +352,21 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
     request->client()->close();
     return 0;
   }
+  // return a credit for each chunk of acked data (polls does not give any credits)
+  if (len)
+    ++_in_flight_credit;
+
+  // for chunked responses ignore acks if there are no _in_flight_credits left
+  if (_chunked && !_in_flight_credit) {
+#ifdef ESP32
+    log_d("(chunk) out of in-flight credits");
+#endif
+    return 0;
+  }
+
   _ackedLength += len;
+  _in_flight -= (_in_flight > len) ? len : _in_flight;
+  // get the size of available sock space
   size_t space = request->client()->space();
 
   size_t headLen = _head.length();
@@ -316,16 +378,31 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
       String out = _head.substring(0, space);
       _head = _head.substring(space);
       _writtenLength += request->client()->write(out.c_str(), out.length());
+      _in_flight += out.length();
+      --_in_flight_credit; // take a credit
       return out.length();
     }
   }
 
   if (_state == RESPONSE_CONTENT) {
+    // for response data we need to control the queue and in-flight fragmentation. Sending small chunks could give low latency,
+    // but flood asynctcp's queue and fragment socket buffer space for large responses.
+    // Let's ignore polled acks and acks in case when we have more in-flight data then the available socket buff space.
+    // That way we could balance on having half the buffer in-flight while another half is filling up, while minimizing events in asynctcp q
+    if (_in_flight > space) {
+      // log_d("defer user call %u/%u", _in_flight, space);
+      //  take the credit back since we are ignoring this ack and rely on other inflight data
+      if (len)
+        --_in_flight_credit;
+      return 0;
+    }
+
     size_t outLen;
     if (_chunked) {
       if (space <= 8) {
         return 0;
       }
+
       outLen = space;
     } else if (!_sendContentLength) {
       outLen = space;
@@ -353,9 +430,7 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
         free(buf);
         return 0;
       }
-      outLen = sprintf_P((char*)buf + headLen, PSTR("%x"), readLen) + headLen;
-      while (outLen < headLen + 4)
-        buf[outLen++] = ' ';
+      outLen = sprintf((char*)buf + headLen, "%04x", readLen) + headLen;
       buf[outLen++] = '\r';
       buf[outLen++] = '\n';
       outLen += readLen;
@@ -371,11 +446,13 @@ size_t AsyncAbstractResponse::_ack(AsyncWebServerRequest* request, size_t len, u
     }
 
     if (headLen) {
-      _head = String();
+      _head = emptyString;
     }
 
     if (outLen) {
       _writtenLength += request->client()->write((const char*)buf, outLen);
+      _in_flight += outLen;
+      --_in_flight_credit; // take a credit
     }
 
     if (_chunked) {
@@ -508,64 +585,63 @@ size_t AsyncAbstractResponse::_fillBufferAndProcessTemplates(uint8_t* data, size
  * File Response
  * */
 
-AsyncFileResponse::~AsyncFileResponse() {
-  if (_content)
-    _content.close();
-}
-
-void AsyncFileResponse::_setContentType(const String& path) {
-#if HAVE_EXTERN_GET_CONTENT_TYPE_FUNCTION
+void AsyncFileResponse::_setContentTypeFromPath(const String& path) {
+#if HAVE_EXTERN_GET_Content_Type_FUNCTION
+  #ifndef ESP8266
+  extern const char* getContentType(const String& path);
+  #else
   extern const __FlashStringHelper* getContentType(const String& path);
+  #endif
   _contentType = getContentType(path);
 #else
-  if (path.endsWith(F(".html")))
-    _contentType = F("text/html");
-  else if (path.endsWith(F(".htm")))
-    _contentType = F("text/html");
-  else if (path.endsWith(F(".css")))
-    _contentType = F("text/css");
-  else if (path.endsWith(F(".json")))
-    _contentType = F("application/json");
-  else if (path.endsWith(F(".js")))
-    _contentType = F("application/javascript");
-  else if (path.endsWith(F(".png")))
-    _contentType = F("image/png");
-  else if (path.endsWith(F(".gif")))
-    _contentType = F("image/gif");
-  else if (path.endsWith(F(".jpg")))
-    _contentType = F("image/jpeg");
-  else if (path.endsWith(F(".ico")))
-    _contentType = F("image/x-icon");
-  else if (path.endsWith(F(".svg")))
-    _contentType = F("image/svg+xml");
-  else if (path.endsWith(F(".eot")))
-    _contentType = F("font/eot");
-  else if (path.endsWith(F(".woff")))
-    _contentType = F("font/woff");
-  else if (path.endsWith(F(".woff2")))
-    _contentType = F("font/woff2");
-  else if (path.endsWith(F(".ttf")))
-    _contentType = F("font/ttf");
-  else if (path.endsWith(F(".xml")))
-    _contentType = F("text/xml");
-  else if (path.endsWith(F(".pdf")))
-    _contentType = F("application/pdf");
-  else if (path.endsWith(F(".zip")))
-    _contentType = F("application/zip");
-  else if (path.endsWith(F(".gz")))
-    _contentType = F("application/x-gzip");
+  if (path.endsWith(T__html))
+    _contentType = T_text_html;
+  else if (path.endsWith(T__htm))
+    _contentType = T_text_html;
+  else if (path.endsWith(T__css))
+    _contentType = T_text_css;
+  else if (path.endsWith(T__json))
+    _contentType = T_application_json;
+  else if (path.endsWith(T__js))
+    _contentType = T_application_javascript;
+  else if (path.endsWith(T__png))
+    _contentType = T_image_png;
+  else if (path.endsWith(T__gif))
+    _contentType = T_image_gif;
+  else if (path.endsWith(T__jpg))
+    _contentType = T_image_jpeg;
+  else if (path.endsWith(T__ico))
+    _contentType = T_image_x_icon;
+  else if (path.endsWith(T__svg))
+    _contentType = T_image_svg_xml;
+  else if (path.endsWith(T__eot))
+    _contentType = T_font_eot;
+  else if (path.endsWith(T__woff))
+    _contentType = T_font_woff;
+  else if (path.endsWith(T__woff2))
+    _contentType = T_font_woff2;
+  else if (path.endsWith(T__ttf))
+    _contentType = T_font_ttf;
+  else if (path.endsWith(T__xml))
+    _contentType = T_text_xml;
+  else if (path.endsWith(T__pdf))
+    _contentType = T_application_pdf;
+  else if (path.endsWith(T__zip))
+    _contentType = T_application_zip;
+  else if (path.endsWith(T__gz))
+    _contentType = T_application_x_gzip;
   else
-    _contentType = F("text/plain");
+    _contentType = T_text_plain;
 #endif
 }
 
-AsyncFileResponse::AsyncFileResponse(FS& fs, const String& path, const String& contentType, bool download, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
+AsyncFileResponse::AsyncFileResponse(FS& fs, const String& path, const char* contentType, bool download, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
   _code = 200;
   _path = path;
 
-  if (!download && !fs.exists(_path) && fs.exists(_path + F(".gz"))) {
-    _path = _path + F(".gz");
-    addHeader(F("Content-Encoding"), F("gzip"));
+  if (!download && !fs.exists(_path) && fs.exists(_path + T__gz)) {
+    _path = _path + T__gz;
+    addHeader(T_Content_Encoding, T_gzip, false);
     _callback = nullptr; // Unable to process zipped templates
     _sendContentLength = true;
     _chunked = false;
@@ -574,8 +650,8 @@ AsyncFileResponse::AsyncFileResponse(FS& fs, const String& path, const String& c
   _content = fs.open(_path, fs::FileOpenMode::read);
   _contentLength = _content.size();
 
-  if (contentType.length() == 0)
-    _setContentType(path);
+  if (strlen(contentType) == 0)
+    _setContentTypeFromPath(path);
   else
     _contentType = contentType;
 
@@ -590,15 +666,15 @@ AsyncFileResponse::AsyncFileResponse(FS& fs, const String& path, const String& c
     // set filename and force rendering
     snprintf_P(buf, sizeof(buf), PSTR("inline"));
   }
-  addHeader(F("Content-Disposition"), buf);
+  addHeader(T_Content_Disposition, buf, false);
 }
 
-AsyncFileResponse::AsyncFileResponse(File content, const String& path, const String& contentType, bool download, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
+AsyncFileResponse::AsyncFileResponse(File content, const String& path, const char* contentType, bool download, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
   _code = 200;
   _path = path;
 
-  if (!download && String(content.name()).endsWith(F(".gz")) && !path.endsWith(F(".gz"))) {
-    addHeader(F("Content-Encoding"), F("gzip"));
+  if (!download && String(content.name()).endsWith(T__gz) && !path.endsWith(T__gz)) {
+    addHeader(T_Content_Encoding, T_gzip, false);
     _callback = nullptr; // Unable to process gzipped templates
     _sendContentLength = true;
     _chunked = false;
@@ -607,8 +683,8 @@ AsyncFileResponse::AsyncFileResponse(File content, const String& path, const Str
   _content = content;
   _contentLength = _content.size();
 
-  if (contentType.length() == 0)
-    _setContentType(path);
+  if (strlen(contentType) == 0)
+    _setContentTypeFromPath(path);
   else
     _contentType = contentType;
 
@@ -621,7 +697,7 @@ AsyncFileResponse::AsyncFileResponse(File content, const String& path, const Str
   } else {
     snprintf_P(buf, sizeof(buf), PSTR("inline"));
   }
-  addHeader(F("Content-Disposition"), buf);
+  addHeader(T_Content_Disposition, buf, false);
 }
 
 size_t AsyncFileResponse::_fillBuffer(uint8_t* data, size_t len) {
@@ -632,7 +708,7 @@ size_t AsyncFileResponse::_fillBuffer(uint8_t* data, size_t len) {
  * Stream Response
  * */
 
-AsyncStreamResponse::AsyncStreamResponse(Stream& stream, const String& contentType, size_t len, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
+AsyncStreamResponse::AsyncStreamResponse(Stream& stream, const char* contentType, size_t len, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
   _code = 200;
   _content = &stream;
   _contentLength = len;
@@ -652,7 +728,7 @@ size_t AsyncStreamResponse::_fillBuffer(uint8_t* data, size_t len) {
  * Callback Response
  * */
 
-AsyncCallbackResponse::AsyncCallbackResponse(const String& contentType, size_t len, AwsResponseFiller callback, AwsTemplateProcessor templateCallback) : AsyncAbstractResponse(templateCallback) {
+AsyncCallbackResponse::AsyncCallbackResponse(const char* contentType, size_t len, AwsResponseFiller callback, AwsTemplateProcessor templateCallback) : AsyncAbstractResponse(templateCallback) {
   _code = 200;
   _content = callback;
   _contentLength = len;
@@ -674,7 +750,7 @@ size_t AsyncCallbackResponse::_fillBuffer(uint8_t* data, size_t len) {
  * Chunked Response
  * */
 
-AsyncChunkedResponse::AsyncChunkedResponse(const String& contentType, AwsResponseFiller callback, AwsTemplateProcessor processorCallback) : AsyncAbstractResponse(processorCallback) {
+AsyncChunkedResponse::AsyncChunkedResponse(const char* contentType, AwsResponseFiller callback, AwsTemplateProcessor processorCallback) : AsyncAbstractResponse(processorCallback) {
   _code = 200;
   _content = callback;
   _contentLength = 0;
@@ -696,7 +772,7 @@ size_t AsyncChunkedResponse::_fillBuffer(uint8_t* data, size_t len) {
  * Progmem Response
  * */
 
-AsyncProgmemResponse::AsyncProgmemResponse(int code, const String& contentType, const uint8_t* content, size_t len, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
+AsyncProgmemResponse::AsyncProgmemResponse(int code, const char* contentType, const uint8_t* content, size_t len, AwsTemplateProcessor callback) : AsyncAbstractResponse(callback) {
   _code = code;
   _content = content;
   _contentType = contentType;
@@ -720,28 +796,21 @@ size_t AsyncProgmemResponse::_fillBuffer(uint8_t* data, size_t len) {
  * Response Stream (You can print/write/printf to it, up to the contentLen bytes)
  * */
 
-AsyncResponseStream::AsyncResponseStream(const String& contentType, size_t bufferSize) {
+AsyncResponseStream::AsyncResponseStream(const char* contentType, size_t bufferSize) {
   _code = 200;
   _contentLength = 0;
   _contentType = contentType;
-  _content = std::unique_ptr<cbuf>(new cbuf(bufferSize)); // std::make_unique<cbuf>(bufferSize);
+  _content.reserve(bufferSize);
 }
 
-AsyncResponseStream::~AsyncResponseStream() = default;
-
 size_t AsyncResponseStream::_fillBuffer(uint8_t* buf, size_t maxLen) {
-  return _content->read((char*)buf, maxLen);
+  return _content.readBytes((char*)buf, maxLen);
 }
 
 size_t AsyncResponseStream::write(const uint8_t* data, size_t len) {
   if (_started())
     return 0;
-
-  if (len > _content->room()) {
-    size_t needed = len - _content->room();
-    _content->resizeAdd(needed);
-  }
-  size_t written = _content->write((const char*)data, len);
+  size_t written = _content.write(data, len);
   _contentLength += written;
   return written;
 }

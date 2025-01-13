@@ -21,6 +21,24 @@
 #include "ESPAsyncWebServer.h"
 #include "WebHandlerImpl.h"
 
+using namespace asyncsrv;
+
+AsyncWebHandler& AsyncWebHandler::setFilter(ArRequestFilterFunction fn) {
+  _filter = fn;
+  return *this;
+}
+AsyncWebHandler& AsyncWebHandler::setAuthentication(const char* username, const char* password, AsyncAuthType authMethod) {
+  if (!_authMiddleware) {
+    _authMiddleware = new AuthenticationMiddleware();
+    _authMiddleware->_freeOnRemoval = true;
+    addMiddleware(_authMiddleware);
+  }
+  _authMiddleware->setUsername(username);
+  _authMiddleware->setPassword(password);
+  _authMiddleware->setAuthType(authMethod);
+  return *this;
+};
+
 AsyncStaticWebHandler::AsyncStaticWebHandler(const char* uri, FS& fs, const char* path, const char* cache_control)
     : _fs(fs), _uri(uri), _path(path), _default_file(F("index.htm")), _cache_control(cache_control), _last_modified(), _callback(nullptr) {
   // Ensure leading '/'
@@ -39,10 +57,11 @@ AsyncStaticWebHandler::AsyncStaticWebHandler(const char* uri, FS& fs, const char
     _uri = _uri.substring(0, _uri.length() - 1);
   if (_path[_path.length() - 1] == '/')
     _path = _path.substring(0, _path.length() - 1);
+}
 
-  // Reset stats
-  _gzipFirst = false;
-  _gzipStats = 0xF8;
+AsyncStaticWebHandler& AsyncStaticWebHandler::setTryGzipFirst(bool value) {
+  _tryGzipFirst = value;
+  return *this;
 }
 
 AsyncStaticWebHandler& AsyncStaticWebHandler::setIsDir(bool isDir) {
@@ -87,25 +106,11 @@ AsyncStaticWebHandler& AsyncStaticWebHandler::setLastModified() {
   return setLastModified(last_modified);
 }
 #endif
-bool AsyncStaticWebHandler::canHandle(AsyncWebServerRequest* request) {
-  if (request->method() != HTTP_GET || !request->url().startsWith(_uri) || !request->isExpectedRequestedConnType(RCT_DEFAULT, RCT_HTTP)) {
-    return false;
-  }
-  if (_getFile(request)) {
-    // We interested in "If-Modified-Since" header to check if file was modified
-    if (_last_modified.length())
-      request->addInterestingHeader(F("If-Modified-Since"));
-
-    if (_cache_control.length())
-      request->addInterestingHeader(F("If-None-Match"));
-
-    return true;
-  }
-
-  return false;
+bool AsyncStaticWebHandler::canHandle(AsyncWebServerRequest* request) const {
+  return request->isHTTP() && request->method() == HTTP_GET && request->url().startsWith(_uri) && _getFile(request);
 }
 
-bool AsyncStaticWebHandler::_getFile(AsyncWebServerRequest* request) {
+bool AsyncStaticWebHandler::_getFile(AsyncWebServerRequest* request) const {
   // Remove the found uri
   String path = request->url().substring(_uri.length());
 
@@ -115,7 +120,7 @@ bool AsyncStaticWebHandler::_getFile(AsyncWebServerRequest* request) {
   path = _path + path;
 
   // Do we have a file or .gz file
-  if (!canSkipFileCheck && _fileExists(request, path))
+  if (!canSkipFileCheck && const_cast<AsyncStaticWebHandler*>(this)->_searchFile(request, path))
     return true;
 
   // Can't handle if not default file
@@ -127,7 +132,7 @@ bool AsyncStaticWebHandler::_getFile(AsyncWebServerRequest* request) {
     path += String('/');
   path += _default_file;
 
-  return _fileExists(request, path);
+  return const_cast<AsyncStaticWebHandler*>(this)->_searchFile(request, path);
 }
 
 #ifdef ESP32
@@ -136,13 +141,13 @@ bool AsyncStaticWebHandler::_getFile(AsyncWebServerRequest* request) {
   #define FILE_IS_REAL(f) (f == true)
 #endif
 
-bool AsyncStaticWebHandler::_fileExists(AsyncWebServerRequest* request, const String& path) {
+bool AsyncStaticWebHandler::_searchFile(AsyncWebServerRequest* request, const String& path) {
   bool fileFound = false;
   bool gzipFound = false;
 
-  String gzip = path + F(".gz");
+  String gzip = path + T__gz;
 
-  if (_gzipFirst) {
+  if (_tryGzipFirst) {
     if (_fs.exists(gzip)) {
       request->_tempFile = _fs.open(gzip, fs::FileOpenMode::read);
       gzipFound = FILE_IS_REAL(request->_tempFile);
@@ -174,15 +179,6 @@ bool AsyncStaticWebHandler::_fileExists(AsyncWebServerRequest* request, const St
     char* _tempPath = (char*)malloc(pathLen + 1);
     snprintf_P(_tempPath, pathLen + 1, PSTR("%s"), path.c_str());
     request->_tempObject = (void*)_tempPath;
-
-    // Calculate gzip statistic
-    _gzipStats = (_gzipStats << 1) + (gzipFound ? 1 : 0);
-    if (_gzipStats == 0x00)
-      _gzipFirst = false; // All files are not gzip
-    else if (_gzipStats == 0xFF)
-      _gzipFirst = true; // All files are gzip
-    else
-      _gzipFirst = _countBits(_gzipStats) > 4; // IF we have more gzip files - try gzip first
   }
 
   return found;
@@ -201,8 +197,6 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest* request) {
   String filename = String((char*)request->_tempObject);
   free(request->_tempObject);
   request->_tempObject = NULL;
-  if ((_username.length() && _password.length()) && !request->authenticate(_username.c_str(), _password.c_str()))
-    return request->requestAuthentication();
 
   if (request->_tempFile == true) {
     time_t lw = request->_tempFile.getLastWrite(); // get last file mod time (if supported by FS)
@@ -222,26 +216,85 @@ void AsyncStaticWebHandler::handleRequest(AsyncWebServerRequest* request) {
     } else {
       etag = String(request->_tempFile.size());
     }
-    if (_last_modified.length() && _last_modified == request->header(F("If-Modified-Since"))) {
+    if (_last_modified.length() && _last_modified == request->header(T_IMS)) {
       request->_tempFile.close();
       request->send(304); // Not modified
-    } else if (_cache_control.length() && request->hasHeader(F("If-None-Match")) && request->header(F("If-None-Match")).equals(etag)) {
+    } else if (_cache_control.length() && request->hasHeader(T_INM) && request->header(T_INM).equals(etag)) {
       request->_tempFile.close();
       AsyncWebServerResponse* response = new AsyncBasicResponse(304); // Not modified
-      response->addHeader(F("Cache-Control"), _cache_control);
-      response->addHeader(F("ETag"), etag);
+      response->addHeader(T_Cache_Control, _cache_control.c_str());
+      response->addHeader(T_ETag, etag.c_str());
       request->send(response);
     } else {
       AsyncWebServerResponse* response = new AsyncFileResponse(request->_tempFile, filename, String(), false, _callback);
       if (_last_modified.length())
-        response->addHeader(F("Last-Modified"), _last_modified);
+        response->addHeader(T_Last_Modified, _last_modified.c_str());
       if (_cache_control.length()) {
-        response->addHeader(F("Cache-Control"), _cache_control);
-        response->addHeader(F("ETag"), etag);
+        response->addHeader(T_Cache_Control, _cache_control.c_str());
+        response->addHeader(T_ETag, etag.c_str());
       }
       request->send(response);
     }
   } else {
     request->send(404);
   }
+}
+
+AsyncStaticWebHandler& AsyncStaticWebHandler::setTemplateProcessor(AwsTemplateProcessor newCallback) {
+  _callback = newCallback;
+  return *this;
+}
+
+void AsyncCallbackWebHandler::setUri(const String& uri) {
+  _uri = uri;
+  _isRegex = uri.startsWith("^") && uri.endsWith("$");
+}
+
+bool AsyncCallbackWebHandler::canHandle(AsyncWebServerRequest* request) const {
+  if (!_onRequest || !request->isHTTP() || !(_method & request->method()))
+    return false;
+
+#ifdef ASYNCWEBSERVER_REGEX
+  if (_isRegex) {
+    std::regex pattern(_uri.c_str());
+    std::smatch matches;
+    std::string s(request->url().c_str());
+    if (std::regex_search(s, matches, pattern)) {
+      for (size_t i = 1; i < matches.size(); ++i) { // start from 1
+        request->_addPathParam(matches[i].str().c_str());
+      }
+    } else {
+      return false;
+    }
+  } else
+#endif
+    if (_uri.length() && _uri.startsWith("/*.")) {
+    String uriTemplate = String(_uri);
+    uriTemplate = uriTemplate.substring(uriTemplate.lastIndexOf("."));
+    if (!request->url().endsWith(uriTemplate))
+      return false;
+  } else if (_uri.length() && _uri.endsWith("*")) {
+    String uriTemplate = String(_uri);
+    uriTemplate = uriTemplate.substring(0, uriTemplate.length() - 1);
+    if (!request->url().startsWith(uriTemplate))
+      return false;
+  } else if (_uri.length() && (_uri != request->url() && !request->url().startsWith(_uri + "/")))
+    return false;
+
+  return true;
+}
+
+void AsyncCallbackWebHandler::handleRequest(AsyncWebServerRequest* request) {
+  if (_onRequest)
+    _onRequest(request);
+  else
+    request->send(500);
+}
+void AsyncCallbackWebHandler::handleUpload(AsyncWebServerRequest* request, const String& filename, size_t index, uint8_t* data, size_t len, bool final) {
+  if (_onUpload)
+    _onUpload(request, filename, index, data, len, final);
+}
+void AsyncCallbackWebHandler::handleBody(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+  if (_onBody)
+    _onBody(request, data, len, index, total);
 }

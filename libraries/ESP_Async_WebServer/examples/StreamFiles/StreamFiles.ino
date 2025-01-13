@@ -10,10 +10,12 @@
   #include <WebServer.h>
   #include <WiFi.h>
 #endif
-#include "StreamConcat.h"
-#include "StreamString.h"
+
+#include <StreamString.h>
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
+
+#include "StreamConcat.h"
 
 DNSServer dnsServer;
 AsyncWebServer server(80);
@@ -23,9 +25,12 @@ void setup() {
 
   LittleFS.begin();
 
+#ifndef CONFIG_IDF_TARGET_ESP32H2
   WiFi.mode(WIFI_AP);
   WiFi.softAP("esp-captive");
+
   dnsServer.start(53, "*", WiFi.softAPIP());
+#endif
 
   File file1 = LittleFS.open("/header.html", "w");
   file1.print("<html><head><title>ESP Captive Portal</title><meta http-equiv=\"refresh\" content=\"1\"></head><body>");

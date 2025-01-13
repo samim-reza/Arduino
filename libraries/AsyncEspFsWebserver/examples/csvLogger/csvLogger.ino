@@ -13,17 +13,6 @@ struct tm ntpTime;
 const char* basePath = "/csv";
 
 
-////////////////////////////////  NTP Time  /////////////////////////////////////////
-void getUpdatedtime(const uint32_t timeout) {
-    uint32_t start = millis();
-    do {
-        time_t now = time(nullptr);
-        ntpTime = *localtime(&now);
-        delay(1);
-    } while (millis() - start < timeout && ntpTime.tm_year <= (1970 - 1900));
-}
-
-
 ////////////////////////////////  Filesystem  /////////////////////////////////////////
 bool startFilesystem(){
   if (LittleFS.begin()){
@@ -40,9 +29,10 @@ bool startFilesystem(){
 
 //////////////////////////// Append a row to csv file ///////////////////////////////////
 bool appenRow() {
-  getUpdatedtime(10);
 
-  char filename[24];
+  getLocalTime(&ntpTime, 10);
+
+  char filename[32];
   snprintf(filename, sizeof(filename),
     "%s/%04d_%02d_%02d.csv",
     basePath,
@@ -75,7 +65,7 @@ bool appenRow() {
       );
   #elif defined(ESP8266)
       uint32_t free;
-      uint16_t max;
+      uint32_t max;
       ESP.getHeapStats(&free, &max, nullptr);
       snprintf(row, sizeof(row),
         "%s, %d, %d, %s, %d",
@@ -132,9 +122,9 @@ void setup() {
     #elif defined(ESP32)
     configTzTime(MYTZ, "time.google.com", "time.windows.com", "pool.ntp.org");
     #endif
-
     // Wait for NTP sync (with timeout)
-    getUpdatedtime(5000);
+    getLocalTime(&ntpTime, 5000);
+  
 
     // Create csv logs folder if not exists
     if (!LittleFS.exists(basePath)) {

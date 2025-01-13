@@ -25,42 +25,43 @@
 #else
   #include "md5.h"
 #endif
+#include "literals.h"
+
+using namespace asyncsrv;
 
 // Basic Auth hash = base64("username:password")
 
 bool checkBasicAuthentication(const char* hash, const char* username, const char* password) {
   if (username == NULL || password == NULL || hash == NULL)
     return false;
+  return generateBasicHash(username, password).equalsIgnoreCase(hash);
+}
+
+String generateBasicHash(const char* username, const char* password) {
+  if (username == NULL || password == NULL)
+    return emptyString;
 
   size_t toencodeLen = strlen(username) + strlen(password) + 1;
-  size_t encodedLen = base64_encode_expected_len(toencodeLen);
-  if (strlen(hash) != encodedLen)
-// Fix from https://github.com/me-no-dev/ESPAsyncWebServer/issues/667
-#ifdef ARDUINO_ARCH_ESP32
-    if (strlen(hash) != encodedLen)
-#else
-    if (strlen(hash) != encodedLen - 1)
-#endif
-      return false;
 
   char* toencode = new char[toencodeLen + 1];
   if (toencode == NULL) {
-    return false;
+    return emptyString;
   }
   char* encoded = new char[base64_encode_expected_len(toencodeLen) + 1];
   if (encoded == NULL) {
     delete[] toencode;
-    return false;
+    return emptyString;
   }
   sprintf_P(toencode, PSTR("%s:%s"), username, password);
-  if (base64_encode_chars(toencode, toencodeLen, encoded) > 0 && memcmp(hash, encoded, encodedLen) == 0) {
+  if (base64_encode_chars(toencode, toencodeLen, encoded) > 0) {
+    String res = String(encoded);
     delete[] toencode;
     delete[] encoded;
-    return true;
+    return res;
   }
   delete[] toencode;
   delete[] encoded;
-  return false;
+  return emptyString;
 }
 
 static bool getMD5(uint8_t* data, uint16_t len, char* output) { // 33 bytes or more
@@ -91,7 +92,7 @@ static bool getMD5(uint8_t* data, uint16_t len, char* output) { // 33 bytes or m
   return true;
 }
 
-static String genRandomMD5() {
+String genRandomMD5() {
 #ifdef ESP8266
   uint32_t r = RANDOM_REG32;
 #else
@@ -119,38 +120,24 @@ String generateDigestHash(const char* username, const char* password, const char
     return emptyString;
   }
   char* out = (char*)malloc(33);
-  String res = String(username);
-  res += ':';
-  res.concat(realm);
-  res += ':';
-  String in = res;
+
+  String in;
+  in.reserve(strlen(username) + strlen(realm) + strlen(password) + 2);
+  in.concat(username);
+  in.concat(':');
+  in.concat(realm);
+  in.concat(':');
   in.concat(password);
+
   if (out == NULL || !getMD5((uint8_t*)(in.c_str()), in.length(), out))
     return emptyString;
-  res.concat(out);
+
+  in = String(out);
   free(out);
-  return res;
+  return in;
 }
 
-String requestDigestAuthentication(const char* realm) {
-  String header = F("realm=\"");
-  if (realm == NULL)
-    header.concat(F("asyncesp"));
-  else
-    header.concat(realm);
-  header.concat(F("\", qop=\"auth\", nonce=\""));
-  header.concat(genRandomMD5());
-  header.concat(F("\", opaque=\""));
-  header.concat(genRandomMD5());
-  header += '"';
-  return header;
-}
-
-#ifndef ESP8266
 bool checkDigestAuthentication(const char* header, const char* method, const char* username, const char* password, const char* realm, bool passwordIsHash, const char* nonce, const char* opaque, const char* uri)
-#else
-bool checkDigestAuthentication(const char* header, const __FlashStringHelper* method, const char* username, const char* password, const char* realm, bool passwordIsHash, const char* nonce, const char* opaque, const char* uri)
-#endif
 {
   if (username == NULL || password == NULL || header == NULL || method == NULL) {
     // os_printf("AUTH FAIL: missing requred fields\n");
@@ -173,7 +160,8 @@ bool checkDigestAuthentication(const char* header, const __FlashStringHelper* me
   String myNc;
   String myCnonce;
 
-  myHeader += F(", ");
+  myHeader += (char)0x2c; // ','
+  myHeader += (char)0x20; // ' '
   do {
     String avLine(myHeader.substring(0, nextBreak));
     avLine.trim();
@@ -191,49 +179,49 @@ bool checkDigestAuthentication(const char* header, const __FlashStringHelper* me
       avLine = avLine.substring(1, avLine.length() - 1);
     }
 
-    if (varName.equals(F("username"))) {
+    if (varName.equals(T_username)) {
       if (!avLine.equals(username)) {
         // os_printf("AUTH FAIL: username\n");
         return false;
       }
       myUsername = avLine;
-    } else if (varName.equals(F("realm"))) {
+    } else if (varName.equals(T_realm)) {
       if (realm != NULL && !avLine.equals(realm)) {
         // os_printf("AUTH FAIL: realm\n");
         return false;
       }
       myRealm = avLine;
-    } else if (varName.equals(F("nonce"))) {
+    } else if (varName.equals(T_nonce)) {
       if (nonce != NULL && !avLine.equals(nonce)) {
         // os_printf("AUTH FAIL: nonce\n");
         return false;
       }
       myNonce = avLine;
-    } else if (varName.equals(F("opaque"))) {
+    } else if (varName.equals(T_opaque)) {
       if (opaque != NULL && !avLine.equals(opaque)) {
         // os_printf("AUTH FAIL: opaque\n");
         return false;
       }
-    } else if (varName.equals(F("uri"))) {
+    } else if (varName.equals(T_uri)) {
       if (uri != NULL && !avLine.equals(uri)) {
         // os_printf("AUTH FAIL: uri\n");
         return false;
       }
       myUri = avLine;
-    } else if (varName.equals(F("response"))) {
+    } else if (varName.equals(T_response)) {
       myResponse = avLine;
-    } else if (varName.equals(F("qop"))) {
+    } else if (varName.equals(T_qop)) {
       myQop = avLine;
-    } else if (varName.equals(F("nc"))) {
+    } else if (varName.equals(T_nc)) {
       myNc = avLine;
-    } else if (varName.equals(F("cnonce"))) {
+    } else if (varName.equals(T_cnonce)) {
       myCnonce = avLine;
     }
   } while (nextBreak > 0);
 
-  String ha1 = (passwordIsHash) ? String(password) : stringMD5(myUsername + ':' + myRealm + ':' + password);
-  String ha2 = String(method) + ':' + myUri;
-  String response = ha1 + ':' + myNonce + ':' + myNc + ':' + myCnonce + ':' + myQop + ':' + stringMD5(ha2);
+  String ha1 = passwordIsHash ? password : stringMD5(myUsername + ':' + myRealm + ':' + password).c_str();
+  String ha2 = stringMD5(String(method) + ':' + myUri);
+  String response = ha1 + ':' + myNonce + ':' + myNc + ':' + myCnonce + ':' + myQop + ':' + ha2;
 
   if (myResponse.equals(stringMD5(response))) {
     // os_printf("AUTH SUCCESS\n");
