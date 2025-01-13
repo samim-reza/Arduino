@@ -5,6 +5,12 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
 
+// Motor control pins
+#define IN1 2
+#define IN2 4
+#define IN3 5
+#define IN4 18
+
 const char* ssid = "Hotspot";         // Replace with your Wi-Fi SSID
 const char* password = "123456789";
 WebSocketsServer webSocket(81);
@@ -20,12 +26,27 @@ HardwareSerial gpsSerial(1);  // UART1 for GPS
 // Current GPS coordinates
 float currentLat = 0.0;
 float currentLng = 0.0;
+float targetLat = 0.0;
+float targetLng = 0.0;
+
+// Distance threshold (e.g., 5 meters)
+float distance = 5.0;
+
+// Bearing (direction to target)
+float bearing = 0.0;
+
+WiFiServer server(80);
 
 void setup() {
+  // Motor pins setup
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
 
+  // Initialize serial and Wi-Fi
   Serial.begin(115200);
-  Serial.println();
-  
+
   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -41,10 +62,7 @@ void setup() {
   webSocket.onEvent(onWebSocketEvent);
 
   Serial.println("WebSocket server started on port 81.");
-  // Initialize serial communication
-  while (!Serial);
-  Serial.println("GPS and Magnetometer Test Started!");
-
+  
   // Initialize GPS serial communication
   gpsSerial.begin(9600, SERIAL_8N1, 16, 17);  // RX=16, TX=17
 
@@ -62,6 +80,7 @@ void setup() {
 
 void loop() {
   webSocket.loop();
+  
   // Process GPS data
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
@@ -79,73 +98,17 @@ void loop() {
     }
   }
 
-  // Process Magnetometer data
-  Wire.beginTransmission(HMC5883L_Address);
-  Wire.write(DataRegisterBegin);
-  Wire.endTransmission();
-
-  Wire.requestFrom(HMC5883L_Address, 6);
-
-  if (Wire.available() == 6) {
-    int16_t x = (Wire.read() << 8) | Wire.read();
-    int16_t z = (Wire.read() << 8) | Wire.read();
-    int16_t y = (Wire.read() << 8) | Wire.read();
-
-    // Print raw magnetometer data
-    Serial.print("X: ");
-    Serial.print(x);
-    Serial.print("\tZ: ");
-    Serial.print(z);
-    Serial.print("\tY: ");
-    Serial.println(y);
-
-    // Calculate pitch and roll
-    float pitch = atan2((float)-y, sqrt((float)(x * x) + (float)(z * z)));
-    float roll = atan2((float)x, (float)z);
-
-    // Correct the X and Y values for tilt
-    float X_comp = x * cos(pitch) + z * sin(pitch);
-    float Y_comp = y * cos(roll) + z * sin(roll);
-
-    // Calculate heading (in radians)
-    float heading = atan2(Y_comp, X_comp);
-
-    // Normalize the heading to be between 0 and 360 degrees
-    if (heading < 0) {
-      heading += 2 * PI;
+  // Calculate bearing and distance
+  if (targetLat != 0.0 && targetLng != 0.0) {
+    calculateBearing();
+    if (bearing != 0) {
+      turnLeft();
+    } else if (distance < 5) {
+      stopMotors();
+    } else {
+      moveForward();
     }
-
-    // Convert heading to degrees
-    float headingDegrees = heading * 180.0 / PI;
-
-    // Map the heading degrees to cardinal directions
-    String direction = "Unknown";
-    if (headingDegrees >= 337.5 || headingDegrees < 22.5) {
-      direction = "North";
-    } else if (headingDegrees >= 22.5 && headingDegrees < 67.5) {
-      direction = "North-East";
-    } else if (headingDegrees >= 67.5 && headingDegrees < 112.5) {
-      direction = "East";
-    } else if (headingDegrees >= 112.5 && headingDegrees < 157.5) {
-      direction = "South-East";
-    } else if (headingDegrees >= 157.5 && headingDegrees < 202.5) {
-      direction = "South";
-    } else if (headingDegrees >= 202.5 && headingDegrees < 247.5) {
-      direction = "South-West";
-    } else if (headingDegrees >= 247.5 && headingDegrees < 292.5) {
-      direction = "West";
-    } else if (headingDegrees >= 292.5 && headingDegrees < 337.5) {
-      direction = "North-West";
-    }
-
-    // Print heading and direction
-    Serial.print("Heading: ");
-    Serial.print(headingDegrees, 2);
-    Serial.print(" degrees (Direction: ");
-    Serial.print(direction);
-    Serial.println(")");
   }
-
   delay(1000);  // Delay to make output readable
 }
 
@@ -170,34 +133,13 @@ void onWebSocketEvent(uint8_t client_num, WStype_t type, uint8_t *payload, size_
         String latStr = receivedData.substring(0, receivedData.indexOf(","));
         String lngStr = receivedData.substring(receivedData.indexOf(",") + 1);
 
-        float targetLat = latStr.toFloat();
-        float targetLng = lngStr.toFloat();
+        targetLat = latStr.toFloat();
+        targetLng = lngStr.toFloat();
 
         Serial.print("Received Latitude: ");
         Serial.println(targetLat, 6);
         Serial.print("Received Longitude: ");
         Serial.println(targetLng, 6);
-
-        // Calculate the bearing from current location to target location
-        float deltaLng = radians(targetLng - currentLng);
-        float currentLatRad = radians(currentLat);
-        float targetLatRad = radians(targetLat);
-
-        float y = sin(deltaLng) * cos(targetLatRad);
-        float x = cos(currentLatRad) * sin(targetLatRad) - 
-                  sin(currentLatRad) * cos(targetLatRad) * cos(deltaLng);
-
-        float bearingRad = atan2(y, x);  // Bearing in radians
-        float bearingDeg = degrees(bearingRad);  // Convert to degrees
-
-        // Normalize the bearing to 0-360 degrees
-        if (bearingDeg < 0) {
-          bearingDeg += 360;
-        }
-
-        Serial.print("Bearing to Target: ");
-        Serial.print(bearingDeg, 2);
-        Serial.println("°");
       } else {
         Serial.println("Invalid data format. Expected 'latitude,longitude'.");
       }
@@ -208,4 +150,57 @@ void onWebSocketEvent(uint8_t client_num, WStype_t type, uint8_t *payload, size_
   }
 }
 
+void calculateBearing() {
+  float deltaLng = radians(targetLng - currentLng);
+  float currentLatRad = radians(currentLat);
+  float targetLatRad = radians(targetLat);
 
+  float y = sin(deltaLng) * cos(targetLatRad);
+  float x = cos(currentLatRad) * sin(targetLatRad) - 
+            sin(currentLatRad) * cos(targetLatRad) * cos(deltaLng);
+
+  float bearingRad = atan2(y, x);  // Bearing in radians
+  bearing = degrees(bearingRad);  // Convert to degrees
+
+  // Normalize the bearing to 0-360 degrees
+  if (bearing < 0) {
+    bearing += 360;
+  }
+
+  // Print the calculated bearing to Serial Monitor
+  Serial.print("Bearing to target: ");
+  Serial.println(bearing);
+
+  // Calculate the distance (Haversine formula)
+  float R = 6371;  // Radius of Earth in kilometers
+  float dLat = radians(targetLat - currentLat);
+  float dLng = radians(targetLng - currentLng);
+  float a = sin(dLat / 2) * sin(dLat / 2) + cos(radians(currentLat)) * cos(radians(targetLat)) * sin(dLng / 2) * sin(dLng / 2);
+  float c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  distance = R * c * 1000;  // Distance in meters
+  Serial.print("Distance to target: ");
+  Serial.print(distance);
+  Serial.println(" meters");
+}
+
+
+void moveForward() {
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
+void turnLeft() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
+void stopMotors() {
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+}
