@@ -60,7 +60,8 @@ void loop() {
 
     // Convert heading to degrees
     float headingDegrees = heading * 180.0 / PI;
-
+    Serial.print("\tcurrent: ");
+    Serial.print(headingDegrees);
     // Map the heading degrees to cardinal directions
     String direction = "Unknown";
     if (headingDegrees >= 337.5 || headingDegrees < 22.5) {

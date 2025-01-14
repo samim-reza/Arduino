@@ -5,6 +5,10 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
 
+//contro speed
+int speed = 200;
+#define EN1 25
+#define EN2 26
 // Motor control pins
 #define IN1 2
 #define IN2 4
@@ -26,14 +30,15 @@ HardwareSerial gpsSerial(1);  // UART1 for GPS
 // Current GPS coordinates
 float currentLat = 0.0;
 float currentLng = 0.0;
-float targetLat = 0.0;
-float targetLng = 0.0;
+float targetLat = 23.8296169;
+float targetLng = 90.5672889;
 
 // Distance threshold (e.g., 5 meters)
 float distance = 5.0;
 
 // Bearing (direction to target)
 float bearing = 0.0;
+float currentHeading = 0.0;  // Heading from the magnetometer
 
 WiFiServer server(80);
 
@@ -44,8 +49,13 @@ void setup() {
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
 
+  pinMode(EN1, OUTPUT);
+  pinMode(EN2, OUTPUT);
+  analogWrite(EN1,speed);
+  analogWrite(EN2,speed);
+
   // Initialize serial and Wi-Fi
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
@@ -98,15 +108,18 @@ void loop() {
     }
   }
 
-  // Calculate bearing and distance
+  // Read magnetometer data
+  readMagnetometer();
+
+  // Calculate bearing and distance if target coordinates are available
   if (targetLat != 0.0 && targetLng != 0.0) {
     calculateBearing();
-    if (bearing != 0) {
-      turnLeft();
+    if (abs(bearing - currentHeading) < 15) {  // If bearing is almost aligned
+      moveForward();
     } else if (distance < 5) {
       stopMotors();
     } else {
-      moveForward();
+      adjustHeading();
     }
   }
   delay(1000);  // Delay to make output readable
@@ -133,8 +146,8 @@ void onWebSocketEvent(uint8_t client_num, WStype_t type, uint8_t *payload, size_
         String latStr = receivedData.substring(0, receivedData.indexOf(","));
         String lngStr = receivedData.substring(receivedData.indexOf(",") + 1);
 
-        targetLat = latStr.toFloat();
-        targetLng = lngStr.toFloat();
+        // targetLat = latStr.toFloat();
+        // targetLng = lngStr.toFloat();
 
         Serial.print("Received Latitude: ");
         Serial.println(targetLat, 6);
@@ -183,22 +196,68 @@ void calculateBearing() {
   Serial.println(" meters");
 }
 
+void readMagnetometer() { int16_t rawX, rawY, rawZ;
+  
+  Wire.beginTransmission(HMC5883L_Address);
+  Wire.write(DataRegisterBegin);
+  Wire.endTransmission();
+  Wire.requestFrom(HMC5883L_Address, 6);
 
-void moveForward() {
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
+  if (Wire.available() >= 6) {
+    rawX = Wire.read() << 8 | Wire.read();
+    rawZ = Wire.read() << 8 | Wire.read();
+    rawY = Wire.read() << 8 | Wire.read();
+
+    // Calculate heading (compass)
+    float heading = atan2(rawY, rawX);
+    currentHeading = degrees(heading);
+
+    // Normalize the heading to 0-360 degrees
+    if (currentHeading < 0) {
+      currentHeading += 360;
+    }
+
+    // Print the current heading from the compass
+    Serial.print("Current Heading: ");
+    Serial.println(currentHeading);
+  }
+}
+
+void adjustHeading() {
+  // Check if current heading is greater or lesser than the target bearing and rotate accordingly
+  if (currentHeading < bearing) {
+    turnLeft();
+  } else if (currentHeading > bearing) {
+    turnRight();
+  }
 }
 
 void turnLeft() {
+  Serial.println("left");
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
 }
 
+void turnRight() {
+  Serial.println("right");
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+}
+
+void moveForward() {
+  Serial.println("forward");
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
 void stopMotors() {
+  Serial.println("stopped");
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
