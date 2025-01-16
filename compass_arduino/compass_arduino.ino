@@ -8,9 +8,9 @@ void setup() {
   // Start the serial communication for debugging
   Serial.begin(9600);
   
-  // Start the I2C communication (using default ESP32 pins for SDA and SCL)
-  Wire.begin(21, 22);  // SDA -> GPIO21, SCL -> GPIO22 for ESP32
-
+  // Start the I2C communication (using default Arduino Uno pins for SDA and SCL)
+  Wire.begin();  // Uses A4 for SDA and A5 for SCL on Arduino Uno
+  
   // Configure the HMC5883L to continuous measurement mode
   Wire.beginTransmission(HMC5883L_Address);
   Wire.write(0x02);  // Mode register

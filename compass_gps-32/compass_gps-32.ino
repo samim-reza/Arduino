@@ -55,7 +55,7 @@ void setup() {
   analogWrite(EN2,speed);
 
   // Initialize serial and Wi-Fi
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
@@ -122,7 +122,7 @@ void loop() {
       adjustHeading();
     }
   }
-  delay(1000);  // Delay to make output readable
+  delay(800);  // Delay to make output readable
 }
 
 void onWebSocketEvent(uint8_t client_num, WStype_t type, uint8_t *payload, size_t length) {
@@ -146,8 +146,8 @@ void onWebSocketEvent(uint8_t client_num, WStype_t type, uint8_t *payload, size_
         String latStr = receivedData.substring(0, receivedData.indexOf(","));
         String lngStr = receivedData.substring(receivedData.indexOf(",") + 1);
 
-        // targetLat = latStr.toFloat();
-        // targetLng = lngStr.toFloat();
+        targetLat = latStr.toFloat();
+        targetLng = lngStr.toFloat();
 
         Serial.print("Received Latitude: ");
         Serial.println(targetLat, 6);
@@ -196,32 +196,39 @@ void calculateBearing() {
   Serial.println(" meters");
 }
 
-void readMagnetometer() { int16_t rawX, rawY, rawZ;
-  
+void readMagnetometer() {
+  delay(100);  // Delay to make output readable
   Wire.beginTransmission(HMC5883L_Address);
   Wire.write(DataRegisterBegin);
   Wire.endTransmission();
   Wire.requestFrom(HMC5883L_Address, 6);
+  delay(100);  // Delay to make output readable
 
-  if (Wire.available() >= 6) {
-    rawX = Wire.read() << 8 | Wire.read();
-    rawZ = Wire.read() << 8 | Wire.read();
-    rawY = Wire.read() << 8 | Wire.read();
+  if (Wire.available() == 6) {
+    int16_t rawX = (Wire.read() << 8) | Wire.read();
+    int16_t rawZ = (Wire.read() << 8) | Wire.read();
+    int16_t rawY = (Wire.read() << 8) | Wire.read();
 
-    // Calculate heading (compass)
-    float heading = atan2(rawY, rawX);
-    currentHeading = degrees(heading);
+    Serial.print("Raw Magnetometer Data - X: ");
+    Serial.print(rawX);
+    Serial.print(", Y: ");
+    Serial.print(rawY);
+    Serial.print(", Z: ");
+    Serial.println(rawZ);
 
-    // Normalize the heading to 0-360 degrees
-    if (currentHeading < 0) {
-      currentHeading += 360;
+    // Calculate heading
+    float headingRad = atan2((float)rawY, (float)rawX);
+    if (headingRad < 0) {
+      headingRad += 2 * PI;
     }
-
-    // Print the current heading from the compass
-    Serial.print("Current Heading: ");
+    currentHeading = headingRad * 180.0 / PI;
+    Serial.print("Heading (degrees): ");
     Serial.println(currentHeading);
+  } else {
+    Serial.println("Failed to read magnetometer data!");
   }
 }
+
 
 void adjustHeading() {
   // Check if current heading is greater or lesser than the target bearing and rotate accordingly
