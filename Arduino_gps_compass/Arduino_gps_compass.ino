@@ -7,7 +7,7 @@
 
 // Motor control pins
 #define IN1 2
-#define IN2 4
+#define IN2 8
 #define IN3 5
 #define IN4 6
 
@@ -28,8 +28,11 @@ Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 // Current GPS coordinates
 float currentLat = 0.0;
 float currentLng = 0.0;
-float targetLat = 23.8296169;
-float targetLng = 90.5672889;
+// float targetLat = 23.8296169;
+// float targetLng = 90.5672889;
+
+float targetLat = 23.0010437;
+float targetLng = 89.8311486;
 
 // Distance and bearing
 float distance = 5.0;
@@ -85,7 +88,7 @@ void loop() {
     adjustHeading();
   }
 
-  delay(1000);
+  delay(500);
 }
 
 void displayGPSInfo() {
