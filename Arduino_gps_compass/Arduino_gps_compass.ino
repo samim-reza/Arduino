@@ -28,11 +28,11 @@ Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 // Current GPS coordinates
 float currentLat = 0.0;
 float currentLng = 0.0;
-// float targetLat = 23.8296169;
-// float targetLng = 90.5672889;
+float targetLat = 23.8296169;
+float targetLng = 90.5672889;
 
-float targetLat = 23.0010437;
-float targetLng = 89.8311486;
+// float targetLat = 23.0010437;
+// float targetLng = 89.8311486;
 
 // Distance and bearing
 float distance = 5.0;
@@ -64,15 +64,21 @@ void setup() {
 }
 
 void loop() {
-
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
     // Parse GPS data
     if (gps.encode(c)) {
+      Serial.println("GPS Data Received");  // Debug line
       displayGPSInfo();
     }
   }
+
+  //Additional checks for GPS signal status
+  if (!gps.location.isUpdated()) {
+    Serial.println("Waiting for GPS data...");
+  }
   // Read magnetometer data
+  
   readMagnetometer();
 
   // Calculate bearing and distance
@@ -83,12 +89,12 @@ void loop() {
     moveForward();
   } else if (distance < 5) {
     stopMotors();
-    delay(5000);
+    // delay(5000);
   } else {
     adjustHeading();
   }
 
-  delay(500);
+  delay(100);
 }
 
 void displayGPSInfo() {
