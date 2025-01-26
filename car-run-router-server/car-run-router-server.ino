@@ -1,14 +1,14 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 
-// const char* ssid = "GUB";
-// const char* password = "GUB!@#2023";
+const char* ssid = "GUB";
+const char* password = "GUB!@#2023";
 
 // const char* ssid = "Room_506";
 // const char* password = "greeN@121";
 
-const char* ssid = "Hotspot";
-const char* password = "123456789";
+// const char* ssid = "Hotspot";
+// const char* password = "123456789";
 
 // const char* ssid = "Tanvir WiFi";
 // const char* password = "tanvir2020";

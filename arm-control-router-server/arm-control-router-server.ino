@@ -8,8 +8,11 @@
 // const char* ssid = "Room_506";
 // const char* password = "greeN@121";
 
-const char* ssid = "Hotspot";
-const char* password = "123456789";
+// const char* ssid = "Hotspot";
+// const char* password = "123456789";
+
+const char* ssid = "GUB";
+const char* password = "GUB!@#2023";
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
