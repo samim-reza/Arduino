@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unified Motor Control</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      text-align: center;
+      padding: 30px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    h2 {
+      color: #555;
+      margin-top: 40px;
+      margin-bottom: 20px;
+    }
+    button {
+      font-size: 18px;
+      padding: 12px 20px;
+      margin: 10px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      background-color: #007BFF;
+      transition: background-color 0.3s, transform 0.2s;
+    }
+    button:active {
+      background-color: #0056b3;
+      transform: scale(0.95);
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .stop {
+      background-color: #FF0000;
+    }
+    .stop:hover {
+      background-color: #b30000;
+    }
+    footer {
+      margin-top: 50px;
+      color: #888;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Unified Motor Control</h1>
+
+  <h2>Actuator Motors</h2>
+  <button onclick="sendHTTPCommand('F')">Forward</button>
+  <button onclick="sendHTTPCommand('B')">Backward</button>
+  <button class="stop" onclick="sendHTTPCommand('S')">Stop</button>
+  <button onclick="sendHTTPCommand('L')">Hand Up</button>
+  <button onclick="sendHTTPCommand('R')">Hand Down</button>
+  
+
+  <h2>Stepper Motors</h2>
+  <button onmousedown="sendWSCommand('front')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Gripper Up</button>
+  <button onmousedown="sendWSCommand('back')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Gripper Down</button>
+  <button onmousedown="sendWSCommand('rotateLeft')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Rotate Left</button>
+  <button onmousedown="sendWSCommand('rotateRight')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Rotate Right</button>
+
+  <h2>Gripper Control</h2>
+  <button onmousedown="sendWSCommand('open')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Open Hand</button>
+  <button onmousedown="sendWSCommand('close')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Close Hand</button>
+
+  <script>
+    const serverIP = 'http://172.20.3.132';
+    const ws = new WebSocket('ws://172.20.3.132:81');
+    let wsInterval;
+
+    function sendHTTPCommand(command) {
+      fetch(`${serverIP}/move?dir=${command}`)
+        .then(response => {
+          if (!response.ok) throw new Error('HTTP Error');
+          return response.text();
+        })
+        .then(console.log)
+        .catch(console.error);
+    }
+
+    function sendWSCommand(command) {
+      ws.send(command);
+      wsInterval = setInterval(() => ws.send(command), 500);
+    }
+
+    function stopWSCommand() {
+      clearInterval(wsInterval);
+    }
+  </script>
+
+  <footer>
+    &copy; 2025 Unified Motor Control System. All Rights Reserved.
+  </footer>
+</body>
+</html>

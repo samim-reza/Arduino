@@ -3,8 +3,12 @@
 #include <WebSocketsServer.h>
 
 // WiFi Credentials
-const char* ssid = "GUB";
-const char* password = "GUB!@#2023";
+const char* ssid = "NODEMCU";
+const char* password = "12345678";
+
+IPAddress local_ip(192, 168, 1, 1);
+IPAddress gateway(192, 168, 1, 1);
+IPAddress subnet(255, 255, 255, 0);
 
 // HTTP Server
 WebServer server(80);
@@ -43,15 +47,12 @@ void setup() {
   Serial.begin(115200);
 
   // Connect to WiFi
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
+  WiFi.softAP(ssid, password);
+  WiFi.softAPConfig(local_ip, gateway, subnet);
+  delay(100);
   Serial.println("\nWiFi connected");
   Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.softAPIP());
 
   // DC Motor Pins
   pinMode(pwm_A, OUTPUT);
@@ -74,6 +75,7 @@ void setup() {
   digitalWrite(enPin2, LOW); // Enable motor driver 2
 
   // HTTP Server Routes
+  server.on("/", handle_OnConnect);
   server.on("/move", HTTP_GET, handleMoveRequest);
   server.onNotFound(handleNotFound);
 
@@ -92,6 +94,10 @@ void loop() {
 }
 
 // HTTP Handlers
+void handle_OnConnect() {
+  server.send(200, "text/html", SendHTML());
+}
+
 void handleMoveRequest() {
   if (!server.hasArg("dir")) {
     server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -122,6 +128,7 @@ void handleNotFound() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(404, "text/plain", "404: Not Found");
 }
+
 // Stepper Motor Functions
 void moveDualMotors(bool clockwise1, bool clockwise2, int steps = stepsPerRevolution) {
   digitalWrite(dirPin1, clockwise1);
@@ -141,23 +148,18 @@ void moveDualMotors(bool clockwise1, bool clockwise2, int steps = stepsPerRevolu
     currentDegree2 = (currentDegree2 + 360) % 360;
   }
 }
+
 // WebSocket Handlers
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
   if (type == WStype_TEXT) {
     String command = String((char*)payload);
 
-    if (command == "front") {moveDualMotors(true, false);
-    Serial.println("front");}
-    else if (command == "back") {moveDualMotors(false, true);
-    Serial.println("back");}
-    else if (command == "rotateLeft") {moveDualMotors(true, true);
-    Serial.println("RL");}
-    else if (command == "rotateRight") {moveDualMotors(false, false);
-    Serial.println("RR");}
-    else if (command == "open") {hand_open();
-    Serial.println("hand open");}
-    else if (command == "close") {hand_close();
-    Serial.println("hand close");}
+    if (command == "front") { moveDualMotors(true, false); Serial.println("front"); }
+    else if (command == "back") { moveDualMotors(false, true); Serial.println("back"); }
+    else if (command == "rotateLeft") { moveDualMotors(true, true); Serial.println("RL"); }
+    else if (command == "rotateRight") { moveDualMotors(false, false); Serial.println("RR"); }
+    else if (command == "open") { hand_open(); Serial.println("hand open"); }
+    else if (command == "close") { hand_close(); Serial.println("hand close"); }
 
     // Send current degrees back to client
     String degreeStr = "Motor1: " + String(currentDegree1) + "°, Motor2: " + String(currentDegree2) + "°";
@@ -169,7 +171,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
 void forward() {
   ledcWrite(0, motor_speed); // Set PWM speed on channel 0
   ledcWrite(1, 0);           // Ensure the other motor channel is OFF
-  digitalWrite(dir_A, LOW); // Set direction
+  digitalWrite(dir_A, LOW);  // Set direction
   digitalWrite(dir_B, HIGH); // Ensure correct direction for forward
   Serial.println("Moving forward");
 }
@@ -185,7 +187,7 @@ void backward() {
 void turn_left() {
   ledcWrite(0, motor_speed); // Set PWM speed on channel 0
   ledcWrite(1, 0);           // Ensure the other motor channel is OFF
-  digitalWrite(pwm_A, LOW); // Set direction
+  digitalWrite(pwm_A, LOW);  // Set direction
   digitalWrite(pwm_B, HIGH); // Ensure correct direction for forward
   Serial.println("Moving forward");
 }
@@ -194,7 +196,7 @@ void turn_right() {
   ledcWrite(0, motor_speed); // Set PWM speed on channel 0
   ledcWrite(1, 0);           // Ensure the other motor channel is OFF
   digitalWrite(pwm_A, HIGH); // Set direction
-  digitalWrite(pwm_B, LOW); // Ensure correct direction for forward
+  digitalWrite(pwm_B, LOW);  // Ensure correct direction for forward
   Serial.println("Moving forward");
 }
 
@@ -210,7 +212,7 @@ void stop_motors() {
 
 void hand_open() {
   ledcWrite(0, 150); // Set PWM speed on channel 0
-  ledcWrite(1, 0);           // Ensure the other motor channel is OFF
+  ledcWrite(1, 0);   // Ensure the other motor channel is OFF
   digitalWrite(pwm_C, LOW); // Set direction
   digitalWrite(dir_C, HIGH); // Ensure correct direction for forward
   Serial.println("opening");
@@ -223,9 +225,9 @@ void hand_open() {
 
 void hand_close() {
   ledcWrite(0, 150); // Set PWM speed on channel 0
-  ledcWrite(1, 0);           // Ensure the other motor channel is OFF
+  ledcWrite(1, 0);   // Ensure the other motor channel is OFF
   digitalWrite(pwm_C, HIGH); // Set direction
-  digitalWrite(dir_C, LOW); // Ensure correct direction for forward
+  digitalWrite(dir_C, LOW);  // Ensure correct direction for forward
   Serial.println("closing");
   delay(500);
   ledcWrite(0, 0);
@@ -234,3 +236,111 @@ void hand_close() {
   digitalWrite(pwm_C, LOW);
 }
 
+String SendHTML() {
+  String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unified Motor Control</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      text-align: center;
+      padding: 30px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    h2 {
+      color: #555;
+      margin-top: 40px;
+      margin-bottom: 20px;
+    }
+    button {
+      font-size: 18px;
+      padding: 12px 20px;
+      margin: 10px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      background-color: #007BFF;
+      transition: background-color 0.3s, transform 0.2s;
+    }
+    button:active {
+      background-color: #0056b3;
+      transform: scale(0.95);
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .stop {
+      background-color: #FF0000;
+    }
+    .stop:hover {
+      background-color: #b30000;
+    }
+    footer {
+      margin-top: 50px;
+      color: #888;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Unified Motor Control</h1>
+
+  <h2>Actuator Motors</h2>
+  <button onclick="sendHTTPCommand('F')">Forward</button>
+  <button onclick="sendHTTPCommand('B')">Backward</button>
+  <button class="stop" onclick="sendHTTPCommand('S')">Stop</button>
+  <button onclick="sendHTTPCommand('L')">Hand Up</button>
+  <button onclick="sendHTTPCommand('R')">Hand Down</button>
+
+  <h2>Stepper Motors</h2>
+  <button onmousedown="sendWSCommand('front')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Gripper Up</button>
+  <button onmousedown="sendWSCommand('back')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Gripper Down</button>
+  <button onmousedown="sendWSCommand('rotateLeft')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Rotate Left</button>
+  <button onmousedown="sendWSCommand('rotateRight')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Rotate Right</button>
+
+  <h2>Gripper Control</h2>
+  <button onmousedown="sendWSCommand('open')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Open Hand</button>
+  <button onmousedown="sendWSCommand('close')" onmouseup="stopWSCommand()" onmouseleave="stopWSCommand()">Close Hand</button>
+
+  <script>
+    const serverIP = 'http://' + window.location.hostname;
+    const ws = new WebSocket('ws://' + window.location.hostname + ':81');
+    let wsInterval;
+
+    function sendHTTPCommand(command) {
+      fetch(`${serverIP}/move?dir=${command}`)
+        .then(response => {
+          if (!response.ok) throw new Error('HTTP Error');
+          return response.text();
+        })
+        .then(console.log)
+        .catch(console.error);
+    }
+
+    function sendWSCommand(command) {
+      ws.send(command);
+      wsInterval = setInterval(() => ws.send(command), 500);
+    }
+
+    function stopWSCommand() {
+      clearInterval(wsInterval);
+    }
+  </script>
+
+  <footer>
+    &copy; 2025 Unified Motor Control System. All Rights Reserved.
+  </footer>
+</body>
+</html>
+)rawliteral";
+  return html;
+}

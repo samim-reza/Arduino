@@ -14,7 +14,7 @@
 // Speed control
 #define EN1 9
 #define EN2 10
-#define k 2
+#define k 7
 int speed = 170;
 int a=0,b=0,g=0,f=0;
 
@@ -30,8 +30,8 @@ Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 // Current GPS coordinates
 float currentLat = 0.0;
 float currentLng = 0.0;
-float targetLat[k] = {23.8296169, 23.829437};
-float targetLng[k] = {90.5672889, 90.567002};
+float targetLat[k] = {23.8296169, 23.829437, 23.829472, 23.829671, 23.829472, 23.829635, 23.829462};
+float targetLng[k] = {90.5672889, 90.567002, 90.567096, 90.567096, 90.567259, 90.567265, 90.567005};
 
 // Distance and bearing
 float distance = 5.0;
@@ -93,7 +93,7 @@ void loop() {
   } else if (distance < 5) {
     stopMotors();
     delay(5000);
-    if (f < k-1) {
+    if (f<k-1) {
     f++;}
   } else {
     adjustHeading();
@@ -103,12 +103,11 @@ void loop() {
   delay(100);
   // if(g==0) digitalWrite(13, HIGH);
   if (a&&b&&g)
-    {
-  digitalWrite(13, HIGH);
-  delay(100); // Wait for 1 second
-
-  // Turn the LED off
-  digitalWrite(13, LOW);
+  {
+    digitalWrite(13, HIGH);
+    delay(100); // Wait for 1 second
+    // Turn the LED off
+    digitalWrite(13, LOW);
   }
   a=0;b=0;
 }
