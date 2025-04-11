@@ -40,7 +40,7 @@ const int enPin3 = 23;
 int motor_speed = 50;
 int currentDegree1 = 0;
 int currentDegree2 = 0;
-const int stepsPerRevolution = 100;
+const int stepsPerRevolution = 300;
 const int degreePerStep = 360 / stepsPerRevolution;
 
 void setup() {
@@ -134,6 +134,9 @@ void moveDualMotors(bool clockwise1, bool clockwise2, int steps = stepsPerRevolu
   digitalWrite(dirPin1, clockwise1);
   digitalWrite(dirPin2, clockwise2);
 
+  float degreesRotated1 = 0;  // Track degrees rotated by motor 1
+  float degreesRotated2 = 0;  // Track degrees rotated by motor 2
+
   for (int i = 0; i < steps; i++) {
     digitalWrite(stepPin1, HIGH);
     digitalWrite(stepPin2, HIGH);
@@ -142,10 +145,22 @@ void moveDualMotors(bool clockwise1, bool clockwise2, int steps = stepsPerRevolu
     digitalWrite(stepPin2, LOW);
     delayMicroseconds(800);
 
+    // Update current degrees
     currentDegree1 += clockwise1 ? degreePerStep : -degreePerStep;
     currentDegree2 += clockwise2 ? degreePerStep : -degreePerStep;
     currentDegree1 = (currentDegree1 + 360) % 360;
     currentDegree2 = (currentDegree2 + 360) % 360;
+
+    // Track degrees rotated
+    degreesRotated1 += degreePerStep;
+    degreesRotated2 += degreePerStep;
+
+    // Check if a full degree has been completed for either motor
+    if (degreesRotated1 >= 1.0 || degreesRotated2 >= 1.0) {
+      delay(10);  // 10ms delay after every degree
+      degreesRotated1 = 0;  // Reset degrees rotated counter
+      degreesRotated2 = 0;
+    }
   }
 }
 
@@ -166,6 +181,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
     webSocket.sendTXT(num, degreeStr);
   }
 }
+
 
 // DC Motor Functions
 void forward() {
@@ -211,25 +227,46 @@ void stop_motors() {
 }
 
 void hand_open() {
-  ledcWrite(0, 150); // Set PWM speed on channel 0
-  ledcWrite(1, 0);   // Ensure the other motor channel is OFF
-  digitalWrite(pwm_C, LOW); // Set direction
-  digitalWrite(dir_C, HIGH); // Ensure correct direction for forward
-  Serial.println("opening");
-  delay(500);
+  Serial.println("Opening");
+
+  for (int i = 0; i < 10; i++) {
+    ledcWrite(0, 150);  // Set PWM speed on channel 0
+    ledcWrite(1, 0);    // Ensure the other motor channel is OFF
+    digitalWrite(pwm_C, LOW);  
+    digitalWrite(dir_C, HIGH); // Set direction
+    delay(25);  // Motor ON for 25ms
+
+    ledcWrite(0, 0);  // Turn off motor
+    digitalWrite(dir_C, LOW);
+    digitalWrite(pwm_C, LOW);
+    delay(45);  // Motor OFF for 25ms
+  }
+
+  // Ensure motor is completely OFF after last iteration
   ledcWrite(0, 0);
   ledcWrite(1, 0);
   digitalWrite(dir_C, LOW);
   digitalWrite(pwm_C, LOW);
 }
 
+
 void hand_close() {
-  ledcWrite(0, 150); // Set PWM speed on channel 0
-  ledcWrite(1, 0);   // Ensure the other motor channel is OFF
-  digitalWrite(pwm_C, HIGH); // Set direction
-  digitalWrite(dir_C, LOW);  // Ensure correct direction for forward
-  Serial.println("closing");
-  delay(500);
+  Serial.println("Closing");
+
+  for (int i = 0; i < 10; i++) {
+    ledcWrite(0, 150);  // Set PWM speed on channel 0
+    ledcWrite(1, 0);    // Ensure the other motor channel is OFF
+    digitalWrite(pwm_C, HIGH);  
+    digitalWrite(dir_C, LOW); // Set direction
+    delay(25);  // Motor ON for 25ms
+
+    ledcWrite(0, 0);  // Turn off motor
+    digitalWrite(dir_C, LOW);
+    digitalWrite(pwm_C, LOW);
+    delay(35);  // Motor OFF for 25ms
+  }
+
+  // Ensure motor is completely OFF after last iteration
   ledcWrite(0, 0);
   ledcWrite(1, 0);
   digitalWrite(dir_C, LOW);
@@ -244,50 +281,80 @@ String SendHTML() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Unified Motor Control</title>
-  <style>
+ <style>
     body {
       font-family: Arial, sans-serif;
       background-color: #f4f4f9;
       text-align: center;
-      padding: 30px;
+      padding: 20px;
     }
     h1 {
       color: #333;
       margin-bottom: 20px;
+      font-size: 2.5vw;
     }
     h2 {
       color: #555;
-      margin-top: 40px;
-      margin-bottom: 20px;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      font-size: 2vw;
     }
+    
+    /* Button Styling */
+    .button-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+    }
+
     button {
-      font-size: 18px;
-      padding: 12px 20px;
-      margin: 10px;
+      font-size: 1.5vw;
+      padding: 1vw 2vw;
       cursor: pointer;
       border: none;
       border-radius: 8px;
       color: #fff;
       background-color: #007BFF;
       transition: background-color 0.3s, transform 0.2s;
+      min-width: 150px;
     }
-    button:active {
-      background-color: #0056b3;
-      transform: scale(0.95);
-    }
+
     button:hover {
       background-color: #0056b3;
     }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
     .stop {
       background-color: #FF0000;
     }
+
     .stop:hover {
       background-color: #b30000;
     }
+
     footer {
-      margin-top: 50px;
+      margin-top: 40px;
       color: #888;
-      font-size: 14px;
+      font-size: 1.2vw;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 6vw;
+      }
+      h2 {
+        font-size: 4vw;
+      }
+      button {
+        font-size: 4vw;
+        padding: 4vw;
+        width: 80%;
+      }
     }
   </style>
 </head>
@@ -328,7 +395,7 @@ String SendHTML() {
 
     function sendWSCommand(command) {
       ws.send(command);
-      wsInterval = setInterval(() => ws.send(command), 500);
+      wsInterval = setInterval(() => ws.send(command), 3500);
     }
 
     function stopWSCommand() {

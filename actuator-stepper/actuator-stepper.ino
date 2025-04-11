@@ -127,6 +127,9 @@ void moveDualMotors(bool clockwise1, bool clockwise2, int steps = stepsPerRevolu
   digitalWrite(dirPin1, clockwise1);
   digitalWrite(dirPin2, clockwise2);
 
+  float degreesRotated1 = 0;  // Track degrees rotated by motor 1
+  float degreesRotated2 = 0;  // Track degrees rotated by motor 2
+
   for (int i = 0; i < steps; i++) {
     digitalWrite(stepPin1, HIGH);
     digitalWrite(stepPin2, HIGH);
@@ -135,10 +138,22 @@ void moveDualMotors(bool clockwise1, bool clockwise2, int steps = stepsPerRevolu
     digitalWrite(stepPin2, LOW);
     delayMicroseconds(800);
 
+    // Update current degrees
     currentDegree1 += clockwise1 ? degreePerStep : -degreePerStep;
     currentDegree2 += clockwise2 ? degreePerStep : -degreePerStep;
     currentDegree1 = (currentDegree1 + 360) % 360;
     currentDegree2 = (currentDegree2 + 360) % 360;
+
+    // Track degrees rotated
+    degreesRotated1 += degreePerStep;
+    degreesRotated2 += degreePerStep;
+
+    // Check if a full degree has been completed for either motor
+    if (degreesRotated1 >= 1.0 || degreesRotated2 >= 1.0) {
+      delay(10);  // 10ms delay after every degree
+      degreesRotated1 = 0;  // Reset degrees rotated counter
+      degreesRotated2 = 0;
+    }
   }
 }
 // WebSocket Handlers
